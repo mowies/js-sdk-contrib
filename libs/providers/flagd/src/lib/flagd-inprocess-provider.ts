@@ -8,13 +8,13 @@ import {
   ProviderStatus,
   ResolutionDetails,
 } from '@openfeature/js-sdk';
-import { FlagdProviderOptions, getConfig } from './configuration';
-import { GRPCService } from './service/grpc/grpc-service';
+import {FlagdProviderOptions, getConfig, getInProcessConfig} from './configuration';
 import { Service } from './service/service';
+import {GRPCSyncService} from "./service/grpc/grpc-sync-service";
 
-export class FlagdProvider implements Provider {
+export class FlagdInProcessProvider implements Provider {
   metadata = {
-    name: 'flagd Provider',
+    name: 'flagd in-process Provider',
   };
 
   get status() {
@@ -31,7 +31,7 @@ export class FlagdProvider implements Provider {
 
   /**
    * Construct a new flagd provider.
-   * 
+   *
    * @param options options, see {@link FlagdProviderOptions}
    * @param logger optional logger, see {@link Logger}
    * @param service optional internal service implementation, should not be needed for production
@@ -41,7 +41,7 @@ export class FlagdProvider implements Provider {
     private readonly logger?: Logger,
     service?: Service,
   ) {
-    this._service = service ? service : new GRPCService(getConfig(options), undefined, logger);
+    this._service = service ? service : new GRPCSyncService(getInProcessConfig(options), undefined, logger);
   }
 
   initialize(): Promise<void> {

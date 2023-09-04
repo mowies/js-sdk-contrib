@@ -8,5 +8,11 @@
   "peerDependencies": {
     "@grpc/grpc-js": "^1.6.0",
     "@openfeature/js-sdk": ">=1.3.0"
+  },
+  "dependencies": {
+    "json-logic-js": "^2.0.2"
+  },
+  "devDependencies": {
+    "@types/json-logic-js": "^2.0.2"
   }
 }

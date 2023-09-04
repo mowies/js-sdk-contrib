@@ -3,7 +3,7 @@ import { DEFAULT_MAX_CACHE_SIZE, DEFAULT_MAX_EVENT_STREAM_RETRIES } from "./cons
 export type CacheOption = 'lru' | 'disabled';
 
 export interface Config {
-  
+
   /**
    * The domain name or IP address of flagd.
    *
@@ -54,7 +54,55 @@ export interface Config {
   maxEventStreamRetries?: number;
 }
 
-export type FlagdProviderOptions = Partial<Config>;
+export interface InProcessConfig {
+
+  /**
+   * The domain name or IP address of flagd.
+   *
+   * @default localhost
+   */
+  host: string;
+
+  /**
+   * The port flagd is listen on.
+   *
+   * @default 8013
+   */
+  port: number;
+
+  /**
+   * Determines if TLS should be used.
+   *
+   * @default false
+   */
+  tls: boolean;
+
+  /**
+   * When set, a unix socket connection is used.
+   *
+   * @example "/tmp/flagd.socks"
+   */
+  socketPath?: string;
+
+  /**
+   * Max cache size (items).
+   *
+   * @default 1000
+   */
+  maxCacheSize?: number;
+
+  /**
+   * Amount of times to attempt to reconnect to the event stream.
+   *
+   * @default 5
+   */
+  maxEventStreamRetries?: number;
+  flagDSourceUri: string;
+  flagDSourceProviderType: 'grpc' | 'kubernetes';
+  flagDSourceSelector: string;
+}
+
+export type FlagdProviderOptions = Partial<Config>|Partial<InProcessConfig>;
 
 const DEFAULT_CONFIG: Config = {
   host: 'localhost',
@@ -65,6 +113,17 @@ const DEFAULT_CONFIG: Config = {
   maxEventStreamRetries: DEFAULT_MAX_EVENT_STREAM_RETRIES,
 };
 
+const DEFAULT_INPROCESS_CONFIG: InProcessConfig = {
+  host: 'localhost',
+  port: 8013,
+  tls: false,
+  maxCacheSize: DEFAULT_MAX_CACHE_SIZE,
+  maxEventStreamRetries: DEFAULT_MAX_EVENT_STREAM_RETRIES,
+  flagDSourceUri: '',
+  flagDSourceProviderType: 'grpc',
+  flagDSourceSelector: ''
+};
+
 enum ENV_VAR {
   FLAGD_HOST = 'FLAGD_HOST',
   FLAGD_PORT = 'FLAGD_PORT',
@@ -73,9 +132,12 @@ enum ENV_VAR {
   FLAGD_CACHE = 'FLAGD_CACHE',
   FLAGD_MAX_CACHE_SIZE = 'FLAGD_MAX_CACHE_SIZE',
   FLAGD_MAX_EVENT_STREAM_RETRIES = 'FLAGD_MAX_EVENT_STREAM_RETRIES',
+  FLAGD_SOURCE_URI = 'FLAGD_SOURCE_URI',
+  FLAGD_SOURCE_PROVIDER_TYPE = 'FLAGD_SOURCE_PROVIDER_TYPE',
+  FLAGD_SOURCE_SELECTOR = 'FLAGD_SOURCE_SELECTOR',
 }
 
-const getEnvVarConfig = (): Partial<Config> => ({
+const getEnvVarConfig = (): Partial<Config | InProcessConfig> => ({
   ...(process.env[ENV_VAR.FLAGD_HOST] && {
     host: process.env[ENV_VAR.FLAGD_HOST],
   }),
@@ -97,11 +159,27 @@ const getEnvVarConfig = (): Partial<Config> => ({
   ...(process.env[ENV_VAR.FLAGD_MAX_EVENT_STREAM_RETRIES] && {
     maxEventStreamRetries: Number(process.env[ENV_VAR.FLAGD_MAX_EVENT_STREAM_RETRIES]),
   }),
+  ...(process.env[ENV_VAR.FLAGD_SOURCE_URI] && {
+    flagDSourceUri: process.env[ENV_VAR.FLAGD_SOURCE_URI],
+  }),
+  ...(process.env[ENV_VAR.FLAGD_SOURCE_PROVIDER_TYPE] && {
+    flagDSourceProviderType: process.env[ENV_VAR.FLAGD_SOURCE_PROVIDER_TYPE],
+  }),
+  ...(process.env[ENV_VAR.FLAGD_SOURCE_SELECTOR] && {
+    flagDSourceSelector: process.env[ENV_VAR.FLAGD_SOURCE_SELECTOR],
+  }),
 });
 
 export function getConfig(options: FlagdProviderOptions = {}) {
   return {
     ...DEFAULT_CONFIG,
+    ...getEnvVarConfig(),
+    ...options,
+  };
+}
+export function getInProcessConfig(options: FlagdProviderOptions = {}) {
+  return {
+    ...DEFAULT_INPROCESS_CONFIG,
     ...getEnvVarConfig(),
     ...options,
   };

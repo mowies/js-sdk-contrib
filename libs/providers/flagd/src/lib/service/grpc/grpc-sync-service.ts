@@ -7,14 +7,11 @@ import {
   JsonValue,
   Logger,
   ParseError,
-  ResolutionDetails,
-  StandardResolutionReasons,
+  ResolutionDetails, StandardResolutionReasons,
   TypeMismatchError,
 } from '@openfeature/js-sdk';
-import { LRUCache } from 'lru-cache';
 import { promisify } from 'util';
 import {
-  EventStreamResponse,
   ResolveBooleanRequest,
   ResolveBooleanResponse,
   ResolveFloatRequest,
@@ -25,15 +22,11 @@ import {
   ResolveObjectResponse,
   ResolveStringRequest,
   ResolveStringResponse,
-  ServiceClient,
 } from '../../../proto/ts/schema/v1/schema';
-import {Config, InProcessConfig} from '../../configuration';
+import {InProcessConfig} from '../../configuration';
 import {
   BASE_EVENT_STREAM_RETRY_BACKOFF_MS,
-  DEFAULT_MAX_CACHE_SIZE,
   DEFAULT_MAX_EVENT_STREAM_RETRIES,
-  EVENT_CONFIGURATION_CHANGE,
-  EVENT_PROVIDER_READY,
 } from '../../constants';
 import { FlagdProvider } from '../../flagd-provider';
 import { Service } from '../service';
@@ -77,13 +70,13 @@ export const Codes = {
 
 export class GRPCSyncService implements Service {
   private _config: InProcessConfig;
-  private _flagConfig: object;
+  private _flagConfig: any;
   private _client: FlagSyncServiceClient;
   private _streamAlive = false;
   private _streamConnectAttempt = 0;
   private _stream: ClientReadableStream<SyncFlagsResponse> | undefined = undefined;
   private _streamConnectBackoff = BASE_EVENT_STREAM_RETRY_BACKOFF_MS;
-  private _maxEventStreamRetries;
+  private _maxSyncStreamRetries;
 
   constructor(
     config: InProcessConfig,
@@ -91,7 +84,7 @@ export class GRPCSyncService implements Service {
     private logger?: Logger,
   ) {
     this._config = config;
-    this._maxEventStreamRetries = config.maxEventStreamRetries ?? DEFAULT_MAX_EVENT_STREAM_RETRIES;
+    this._maxSyncStreamRetries = config.maxEventStreamRetries ?? DEFAULT_MAX_EVENT_STREAM_RETRIES;
     this._client = client
       ? client
       : new FlagSyncServiceClient(
@@ -121,16 +114,28 @@ export class GRPCSyncService implements Service {
   ): Promise<ResolutionDetails<boolean>> {
     // TODO resolve json logic of local flag config
     // TODO abstract this out into a separate thing for easier testing
+    const resdet = {
+      value: false,
+    } as ResolutionDetails<boolean>;
+    return new Promise(() => resdet);
   }
 
   async resolveString(flagKey: string, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<string>> {
     // TODO resolve json logic of local flag config
     // TODO abstract this out into a separate thing for easier testing
+    const resdet = {
+      value: 'something',
+    } as ResolutionDetails<string>;
+    return new Promise(() => resdet);
   }
 
   async resolveNumber(flagKey: string, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<number>> {
     // TODO resolve json logic of local flag config
     // TODO abstract this out into a separate thing for easier testing
+    const resdet = {
+      value: 123,
+    } as ResolutionDetails<number>;
+    return new Promise(() => resdet);
   }
 
   async resolveObject<T extends JsonValue>(
@@ -140,6 +145,10 @@ export class GRPCSyncService implements Service {
   ): Promise<ResolutionDetails<T>> {
     // TODO resolve json logic of local flag config
     // TODO abstract this out into a separate thing for easier testing
+    const resdet = {
+      value: false,
+    } as ResolutionDetails<T>;
+    return new Promise(() => resdet);
   }
 
   private connectStream(
@@ -166,7 +175,7 @@ export class GRPCSyncService implements Service {
         this.handleClose();
       });
       stream.on('data', (message) => {
-        //TODO check for sync all, fill up cache, set singleton config object, call changed handler
+        //TODO check for sync all, set singleton config object, call changed handler
         // TODO all other states: just print a warning
         if (message.type === SyncState.SYNC_STATE_ALL) {
           this.handleFlagsChanged(message, changedCallback);
@@ -188,13 +197,15 @@ export class GRPCSyncService implements Service {
     resolve();
   }
 
-  private handleFlagsChanged(message: EventStreamResponse, changedCallback: (flagsChanged: string[]) => void) {
-    if (message.data) {
-      const data = message.data;
+  private handleFlagsChanged(message: SyncFlagsResponse, changedCallback: (flagsChanged: string[]) => void) {
+    if (message.flagConfiguration) {
+      const data = message.flagConfiguration;
       this.logger?.debug(`${FlagdProvider.name}: got message: ${JSON.stringify(data, undefined, 2)}`);
+
       if (data && typeof data === 'object' && 'flags' in data && data?.['flags']) {
         const flagChangeMessage = data as FlagChangeMessage;
         const flagsChanged: string[] = Object.keys(flagChangeMessage.flags || []);
+        this._flagConfig = flagsChanged;
         changedCallback(flagsChanged);
       }
     }
@@ -208,11 +219,11 @@ export class GRPCSyncService implements Service {
   ) {
     disconnectCallback();
     this.logger?.error(`${FlagdProvider.name}: streaming connection error, will attempt reconnect...`);
-    // TODO clear local copy of flag config
+    this._flagConfig = null;
     this._streamAlive = false;
 
     // if we haven't reached max attempt, reconnect after backoff
-    if (this._streamConnectAttempt <= this._maxEventStreamRetries) {
+    if (this._streamConnectAttempt <= this._maxSyncStreamRetries) {
       this._streamConnectAttempt++;
       setTimeout(() => {
         this._streamConnectBackoff = this._streamConnectBackoff * 2;
@@ -222,7 +233,7 @@ export class GRPCSyncService implements Service {
       }, this._streamConnectBackoff);
     } else {
       // after max attempts, give up
-      const errorMessage = `${FlagdProvider.name}: max stream connect attempts (${this._maxEventStreamRetries} reached)`;
+      const errorMessage = `${FlagdProvider.name}: max stream connect attempts (${this._maxSyncStreamRetries} reached)`;
       this.logger?.error(errorMessage);
       reject(new Error(errorMessage));
     }
@@ -230,7 +241,7 @@ export class GRPCSyncService implements Service {
 
   private handleClose() {
     this.logger?.info(`${FlagdProvider.name}: streaming connection closed`);
-    // TODO clear local copy of flag config
+    this._flagConfig = null;
     this._streamAlive = false;
   }
 
